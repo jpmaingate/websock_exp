@@ -1,0 +1,5 @@
+websockets\hello\Application.class
+websockets\hello\HelloMessage.class
+websockets\hello\GreetingController.class
+websockets\hello\Greeting.class
+websockets\hello\WebSocketConfig.class

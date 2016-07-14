@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hello WebSocket</title>
+<script src="sockjs-0.3.4.js"></script>
+<script src="stomp.js"></script>
+<script type="text/javascript">
+	var stompClient = null;
+
+	function setConnected(connected) {
+		document.getElementById('connect').disabled = connected;
+		document.getElementById('disconnect').disabled = !connected;
+		document.getElementById('conversationDiv').style.visibility = connected ? 'visible'
+				: 'hidden';
+		document.getElementById('response').innerHTML = '';
+	}
+
+	function connect() {
+		var socket = new SockJS('/hello');
+		stompClient = Stomp.over(socket);
+		stompClient.connect({}, function(frame) {
+			setConnected(true);
+			console.log('Connected: ' + frame);
+			stompClient.subscribe('/topic/greetings', function(greeting) {
+				showGreeting(JSON.parse(greeting.body).content);
+				//showGreeting(greeting);
+			});
+			
+			stompClient.subscribe('/topic/values', function(value) {
+				//showValue(JSON.parse(value.body).content);
+				setNewY(JSON.parse(value.body).content, myRectangles[0]);
+			});
+		});
+	}
+
+	function disconnect() {
+		if (stompClient != null) {
+			stompClient.disconnect();
+		}
+		setConnected(false);
+		console.log("Disconnected");
+	}
+
+	function sendName() {
+		var name = document.getElementById('name').value;
+		stompClient.send("/app/hello", {}, JSON.stringify({
+			'name' : name
+		}));
+	}
+
+	function showGreeting(message) {
+		var response = document.getElementById('response');
+		var p = document.createElement('p');
+		p.style.wordWrap = 'break-word';
+		p.appendChild(document.createTextNode(message));
+		response.appendChild(p);
+	}
+	
+	function showValue(message) {
+		var response = document.getElementById('valueResponse');
+		var p = document.createElement('p');
+		p.style.wordWrap = 'break-word';
+		p.appendChild(document.createTextNode(message));
+		response.appendChild(p);		
+	}
+	
+</script>
+</head>
+<body onload="disconnect()">
+	<noscript>
+		<h2 style="color: #ff0000">Seems your browser doesn't support
+			Javascript! Websocket relies on Javascript being enabled. Please
+			enable Javascript and reload this page!</h2>
+	</noscript>
+	<div>
+		<div>
+			<button id="connect" onclick="connect();">Connect</button>
+			<button id="disconnect" disabled="disabled" onclick="disconnect();">Disconnect</button>
+		</div>
+		<div id="conversationDiv">
+			<label>What is your name?</label><input type="text" id="name" />
+			<button id="sendName" onclick="sendName();">Send</button>
+			<p id="response"></p>
+		</div>
+		<div id="valueDiv">
+			<!-- <label>What is your name?</label><input type="text" id="name" />-->
+<!-- 			<button id="sendName" onclick="sendName();">Send</button> -->
+			<p id="valueResponse"></p>
+		</div>
+	</div>
+	<div>
+		<canvas id="animCanvas" width="400" height="400"
+			style="position: absolute; left: 0; top: 100; z-index: 0;"></canvas>
+		<canvas id="bgCanvas" width="400" height="400"
+			style="position: absolute; left: 0; top: 100; z-index: 1;"></canvas>
+		<script>
+			window.requestAnimFrame = (function(callback) {
+				return window.requestAnimationFrame
+						|| window.webkitRequestAnimationFrame
+						|| window.mozRequestAnimationFrame
+						|| window.oRequestAnimationFrame
+						|| window.msRequestAnimationFrame
+						|| function(callback) {
+							window.setTimeout(callback, 1000 / 60);
+						};
+			})();
+
+// 			function drawBackground(context) {
+// 				context.beginPath();
+// 				for (var i = 0; i <= 400; i += 20) {
+// 					context.moveTo(i, 0);
+// 					context.lineTo(i, 400);
+// 				}
+// 				context.lineWidth = 1;
+// 				context.strokeStyle = '#ff0000';
+// 				context.stroke();
+
+// 				context.globalAlpha = 0.5;
+// 				context.beginPath();
+// 				for (var i = 0; i <= 400; i += 20) {
+// 					context.moveTo(0, i);
+// 					context.lineTo(400, i);
+// 				}
+
+// 				context.lineWidth = 1;
+// 				context.strokeStyle = '#ff00AA';
+// 				context.stroke();
+
+// 				context.globalAlpha = 1;
+// 				context.beginPath();
+// 				context.moveTo(0, 0);
+// 				context.lineTo(0, 400);
+// 				context.lineTo(400, 400);
+
+// 				context.lineWidth = 2;
+// 				context.strokeStyle = '#000000';
+// 				context.stroke();
+// 			}
+
+			function drawRectangle(myRectangle, context, alpha) {
+				context.beginPath();
+				context.rect(myRectangle.x, myRectangle.y, myRectangle.width,
+						myRectangle.height);
+				context.fillStyle = '#8ED6FF';
+				context.fill();
+				context.lineWidth = myRectangle.borderWidth;
+				context.strokeStyle = 'black';
+				context.globalAlpha = alpha;
+				context.stroke();
+
+			}
+
+			function animate(myRectangles, canvas, context, startTime) {
+				// update
+				var time = (new Date()).getTime() - startTime;
+
+				// pixels / second
+				var newX = linearSpeed * time / 1000;
+
+				// Calculate coordinates
+				//calculateSine(newX, myRectangles[0], canvas);
+				randY(newX, myRectangles[0], canvas);
+
+				// if rectangle has reached the end, restart at the beginning.
+				if (newX >= canvas.width) {
+					myRectangles[0].x = 0;
+					startTime = (new Date()).getTime();
+				}
+
+				// clear
+				context.clearRect(0, 0, canvas.width, canvas.height);
+
+				// draw the rectangles
+				drawRectangles(myRectangles, context);
+
+				// shift old and add a new rectangle
+				shiftAndPopRectangles(myRectangles);
+
+				// request new frame
+				requestAnimFrame(function() {
+					animate(myRectangles, canvas, context, startTime);
+				});
+			}
+
+			function shiftAndPopRectangles(myRectangles) {
+				myRectangles.unshift(new rectangle(currentY));
+				myRectangles.pop();
+			}
+
+			function drawRectangles(myRectangles, context) {
+				for (var i = 0; i < myRectangles.length; i++) {
+					drawRectangle(myRectangles[i], context, 1 / (i + 1));
+				}
+			}
+
+			// function clone(obj) {
+			//	if (null == obj || "object" != typeof obj) return obj;
+			//	var copy = obj.constructor();
+			//	for (var attr in obj) {
+			//		if (obj.hasOwnProperty(attr)) copy[attr] = obj[attr];
+			//	}
+			//	return copy;
+			//}
+
+			function calculateSaw(newX, rectangle, canvas) {
+				if (newX < canvas.width - rectangle.width
+						- rectangle.borderWidth / 2) {
+					rectangle.x = newX;
+				}
+				if (rectangle.y < rectangle.maxY) {
+					rectangle.yDirection = 0;
+				}
+				if (rectangle.y > rectangle.minY) {
+					rectangle.yDirection = 1;
+				}
+				if (rectangle.yDirection == 0) {
+					rectangle.y = rectangle.y - newX + 100;
+					console.log("Direction :" + rectangle.yDirection + ":"
+							+ rectangle.y);
+				}
+				if (rectangle.yDirection == 1) {
+					rectangle.y = rectangle.y + newX + 100;
+					console.log("Direction :" + rectangle.yDirection + ":"
+							+ rectangle.y);
+				}
+			}
+			
+			function randY(newX, rectangle, canvas) {
+				if (newX < canvas.width - rectangle.width
+						- rectangle.borderWidth / 2) {
+					rectangle.x = newX;
+				}
+			}
+			
+			function setNewY(newY, rectangle) {
+				rectangle.y = newY*100;
+				currentY = newY*100;
+			}
+			
+			function calculateSine(newX, rectangle, canvas) {
+				if (newX < canvas.width - rectangle.width
+						- rectangle.borderWidth / 2) {
+					rectangle.x = newX;
+				}
+
+				if (Math.round(counter) == 100) {
+					counter = 0;
+				}
+
+				rectangle.y = (Math.sin(counter) * 100) + 150;
+				//console.log(rectangle.y);
+
+				counter += increase;
+			}
+			
+			var currentY = 100;
+			
+			function rectangle(currentY) {
+				this.yDirection = 0;
+				this.maxY = 200;
+				this.minY = 0;
+				this.x = 0;
+				this.y = currentY;
+				this.width = 2;
+				this.height = 2;
+				this.borderWidth = 2;
+			}
+
+			function rectangles(size) {
+				var rectArray = new Array();
+
+				for (var i = 0; i < size; i++) {
+					rectArray.push(new rectangle(currentY));
+				}
+
+				return rectArray;
+			}
+
+			var myRectangles = rectangles(125);
+
+			var animCanvas = document.getElementById('animCanvas');
+			var animContext = animCanvas.getContext('2d');
+			var bgCanvas = document.getElementById('bgCanvas');
+			var bgContext = bgCanvas.getContext('2d');
+			var linearSpeed = 80;
+			var counter = 0;
+			var increase = Math.PI / linearSpeed;
+
+			//drawBackground(bgContext);
+			drawRectangles(myRectangles, animContext);
+
+			// wait one second before starting animation
+			setTimeout(function() {
+				var startTime = (new Date()).getTime();
+				animate(myRectangles, animCanvas, animContext, startTime);
+			}, 0);
+		</script>
+	</div>
+</body>
+</html>
